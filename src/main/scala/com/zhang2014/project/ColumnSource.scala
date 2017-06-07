@@ -8,19 +8,19 @@ import akka.NotUsed
 import akka.stream.scaladsl.Source
 import akka.stream.stage.{GraphStage, GraphStageLogic, OutHandler}
 import akka.stream.{Attributes, Outlet, SourceShape}
+import com.google.common.io.LittleEndianDataInputStream
 
 import scala.collection.JavaConverters
 import scala.reflect.ClassTag
 
 object ColumnSource
 {
-  def apply[T](pathWithPart: String, columnName: String)(implicit m: ClassTag[T]): Source[T, NotUsed] = {
-    Source.fromGraph[T, NotUsed](
-      new ColumnSource[T](
-        new RandomAccessFile(pathWithPart + "/" + columnName + ".bin", "r").getChannel,
-        new RandomAccessFile(pathWithPart + "/" + columnName + ".mrk", "r").getChannel
-      )
+  def apply[T: ClassTag](pathWithPart: String, columnName: String): Source[T, NotUsed] = {
+    val source = new ColumnSource[T](
+      new RandomAccessFile(pathWithPart + "/" + columnName + ".bin", "r").getChannel,
+      new RandomAccessFile(pathWithPart + "/" + columnName + ".mrk", "r").getChannel
     )
+    Source.fromGraph[T, NotUsed](source)
   }
 
 }
@@ -60,12 +60,12 @@ final class ColumnSource[T](bin: FileChannel, mark: FileChannel)(implicit m: Cla
       case (i, position, 0) => (false, ByteBuffer.allocate(0))
       case (i, position, offset) =>
         val buffer = readCompressedData(position, 0, -1)
-        (buffer.limit() == offset, buffer.limit(offset.toInt).asInstanceOf[ByteBuffer])
+        (buffer.limit() != offset, buffer.limit(offset.toInt).asInstanceOf[ByteBuffer])
     }
     import JavaConverters._
     markReader.readWith(Function.untupled(fun)) match {
       case Nil => Option.empty[TypeInputStream[T]]
-      case buffers => createTypeInputStream(new DataInputStream(new ByteBufferInputStream(buffers.asJava)))
+      case buffers => createTypeInputStream(new LittleEndianDataInputStream(new ByteBufferInputStream(buffers.asJava)))
     }
   }
 
@@ -82,12 +82,13 @@ final class ColumnSource[T](bin: FileChannel, mark: FileChannel)(implicit m: Cla
     CompressedFactory.get(compressedHeaderBuffer.get()).read(bin, offset, limit)
   }
 
-  private def createTypeInputStream(input: DataInputStream): Option[TypeInputStream[T]] =
-    m.runtimeClass match {
-      case x if x.isInstanceOf[Class[Byte]] => Some(ByteInputStream(input)).map(_.asInstanceOf[TypeInputStream[T]])
-      case x if x.isInstanceOf[Class[Int]] => Some(IntInputStream(input)).map(_.asInstanceOf[TypeInputStream[T]])
-      case x if x.isInstanceOf[Class[Long]] => Some(LongInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
-      case x if x.isInstanceOf[Class[Float]] => Some(FloatInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
+  private def createTypeInputStream(input: LittleEndianDataInputStream): Option[TypeInputStream[T]] =
+    m match {
+      case x if x <:< reflect.classTag[Byte] => Some(ByteInputStream(input)).map(_.asInstanceOf[TypeInputStream[T]])
+      case x if x <:< reflect.classTag[Int] => Some(IntInputStream(input)).map(_.asInstanceOf[TypeInputStream[T]])
+      case x if x <:< reflect.classTag[Long] => Some(LongInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
+      case x if x <:< reflect.classTag[Float] => Some(FloatInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
+      case x if x <:< reflect.classTag[Float] => Some(FloatInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
     }
 
 }

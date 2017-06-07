@@ -26,17 +26,18 @@ object DataPartSource
       GraphDSL.create() { implicit b =>
         import GraphDSL.Implicits._
         val columns = (0 until columnCount.toInt).map(_ => reader.readLine().split(" ", 2)).map {
-          case Array(columnName, "Date") => readUInt16(path, columnName).map(createDate).map(v => (1, columnName, v))
-          case Array(columnName, "Int16") => readInt16(path, columnName).map(v => (2, columnName, v))
-          case Array(columnName, "Int32") => readInt32(path, columnName).map(v => (3, columnName, v))
-          case Array(columnName, "Int64") => readInt64(path, columnName).map(v => (4, columnName, v))
-          case Array(columnName, "UInt16") => readUInt16(path, columnName).map(v => (5, columnName, v))
-          case Array(columnName, "UInt32") => readUInt32(path, columnName).map(v => (6, columnName, v))
-          case Array(columnName, "UInt64") => readUInt64(path, columnName).map(v => (7, columnName, v))
+          case Array(columnName, "Date") => readUInt16(path, columnName).map(createDate)
+            .map(v => (1.toByte, columnName, v))
+          case Array(columnName, "Int16") => readInt16(path, columnName).map(v => (2.toByte, columnName, v))
+          case Array(columnName, "Int32") => readInt32(path, columnName).map(v => (3.toByte, columnName, v))
+          case Array(columnName, "Int64") => readInt64(path, columnName).map(v => (4.toByte, columnName, v))
+          case Array(columnName, "UInt16") => readUInt16(path, columnName).map(v => (5.toByte, columnName, v))
+          case Array(columnName, "UInt32") => readUInt32(path, columnName).map(v => (6.toByte, columnName, v))
+          case Array(columnName, "UInt64") => readUInt64(path, columnName).map(v => (7.toByte, columnName, v))
         }
         val zip = b.add(RecordZip(columns.length))
 
-        columns.zipWithIndex.foreach { case (s, i) => s ~> zip.inlets(i) }
+        columns.zipWithIndex.foreach { case (s, i) => s ~> zip.in(i) }
         SourceShape(zip.out)
       }
     )
@@ -75,16 +76,16 @@ object DataPartSource
 
     override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) {
       private def tryPushAll(): Unit = {
-        push(out, inlets.map(grab).toList)
+        push(out, Record(ins.map(grab).toList))
         if (willShutDown) {
           completeStage()
         }
         else {
-          inlets.foreach(pull)
+          ins.foreach(pull)
         }
       }
 
-      inlets.foreach { in =>
+      ins.foreach { in =>
         setHandler(
           in, new InHandler
           {
@@ -108,7 +109,7 @@ object DataPartSource
         {
           @throws[Exception](classOf[Exception])
           override def onPull(): Unit = {
-            pending += inlets.length
+            pending += ins.length
             if (pending == 0) tryPushAll()
           }
         }
@@ -117,9 +118,9 @@ object DataPartSource
     }
 
 
-    val inlets = (0 until n).map(i => Inlet[(Byte, String, Any)](s"Zip-Record-in-$i"))
-    val out    = Outlet[Record]("Zip-Record-out")
-    val shape  = UniformFanInShape(out, inlets: _*)
+    val ins   = (0 until n).map(i => Inlet[(Byte, String, Any)](s"Zip-Record-in-$i"))
+    val out   = Outlet[Record]("Zip-Record-out")
+    val shape = UniformFanInShape(out, ins: _*)
   }
 
 }
