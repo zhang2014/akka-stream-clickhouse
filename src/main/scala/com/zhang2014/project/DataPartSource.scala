@@ -3,7 +3,7 @@ package com.zhang2014.project
 import java.io.{BufferedReader, FileReader}
 import java.math.BigInteger
 import java.nio.{ByteBuffer, ByteOrder}
-import java.util.Date
+import java.util.{Calendar, Date}
 
 import akka.NotUsed
 import akka.stream._
@@ -22,18 +22,19 @@ object DataPartSource
     val "columns format version: 1" = reader.readLine()
     val Array(columnCount, "columns:") = reader.readLine().split(" ", 2)
 
+    import DataType._
     Source.fromGraph(
       GraphDSL.create() { implicit b =>
         import GraphDSL.Implicits._
-        val columns = (0 until columnCount.toInt).map(_ => reader.readLine().split(" ", 2)).map {
-          case Array(columnName, "Date") => readUInt16(path, columnName).map(createDate)
-            .map(v => (1.toByte, columnName, v))
-          case Array(columnName, "Int16") => readInt16(path, columnName).map(v => (2.toByte, columnName, v))
-          case Array(columnName, "Int32") => readInt32(path, columnName).map(v => (3.toByte, columnName, v))
-          case Array(columnName, "Int64") => readInt64(path, columnName).map(v => (4.toByte, columnName, v))
-          case Array(columnName, "UInt16") => readUInt16(path, columnName).map(v => (5.toByte, columnName, v))
-          case Array(columnName, "UInt32") => readUInt32(path, columnName).map(v => (6.toByte, columnName, v))
-          case Array(columnName, "UInt64") => readUInt64(path, columnName).map(v => (7.toByte, columnName, v))
+        val columns = (0 until columnCount.toInt).map(_ => reader.readLine().split(" ", 2)).map(removeIgnoreChar).map {
+          case Array(columnName, "Date") => readDate(path, columnName).map(v => (DATE, columnName, v))
+          case Array(columnName, "Int16") => readInt16(path, columnName).map(v => (INT16, columnName, v))
+          case Array(columnName, "Int32") => readInt32(path, columnName).map(v => (INT32, columnName, v))
+          case Array(columnName, "Int64") => readInt64(path, columnName).map(v => (INT64, columnName, v))
+          case Array(columnName, "UInt16") => readUInt16(path, columnName).map(v => (UINT16, columnName, v))
+          case Array(columnName, "UInt32") => readUInt32(path, columnName).map(v => (UINT32, columnName, v))
+          case Array(columnName, "UInt64") => readUInt64(path, columnName).map(v => (UINT64, columnName, v))
+          case Array(columnName, "String") => ColumnSource[String](path, columnName).map(v => (STRING, columnName, v))
         }
         val zip = b.add(RecordZip(columns.length))
 
@@ -43,7 +44,10 @@ object DataPartSource
     )
   }
 
-  private def createDate(day: Int): Date = ???
+  import scala.concurrent.duration._
+
+  private def readDate(path: String, columnName: String) = readUInt16(path, columnName)
+    .map(d => new Date(d.days.toMillis))
 
   private def readInt8(path: String, columnName: String) = ColumnSource[Byte](path, columnName)
 
@@ -65,6 +69,11 @@ object DataPartSource
     longBuffer.clear()
     longBuffer.putLong(l)
     BigInt(new BigInteger(1, longBuffer.array()))
+  }
+
+  private def removeIgnoreChar(arr: Array[String]) = {
+    arr(0) = arr(0).substring(1, arr(0).length - 1)
+    arr
   }
 
   private final case class RecordZip(n: Int) extends GraphStage[UniformFanInShape[(Byte, String, Any), Record]]
@@ -115,6 +124,7 @@ object DataPartSource
         }
       )
 
+      override def preStart(): Unit = ins.foreach(pull)
     }
 
 

@@ -16,6 +16,11 @@ case class ByteInputStream(input: LittleEndianDataInputStream) extends TypeInput
   override def next: Option[Byte] = Try(input.readByte()).map(e => Some(e)).getOrElse(None)
 }
 
+case class ShortInputSteam(input: LittleEndianDataInputStream) extends TypeInputStream[Short]
+{
+  override def next: Option[Short] = Try(input.readShort()).map(e => Some(e)).getOrElse(None)
+}
+
 case class IntInputStream(input: LittleEndianDataInputStream) extends TypeInputStream[Int]
 {
   override def next: Option[Int] = Try(input.readInt()).map(e => Some(e)).getOrElse(None)
