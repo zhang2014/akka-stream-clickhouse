@@ -16,6 +16,7 @@ object DataPartSource
 {
   def apply(path: String): Source[Record, NotUsed] = {
     //TODO:验证CheckSum
+    //TODO:考虑primary.idx主键索引的使用
     val reader = new BufferedReader(new FileReader(s"$path/columns.txt"))
 
     val "columns format version: 1" = reader.readLine()
