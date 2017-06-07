@@ -84,6 +84,7 @@ final class ColumnSource[T](bin: FileChannel, mark: FileChannel)(implicit m: Cla
 
   private def createTypeInputStream(input: DataInputStream): Option[TypeInputStream[T]] =
     m.runtimeClass match {
+      case x if x.isInstanceOf[Class[Byte]] => Some(ByteInputStream(input)).map(_.asInstanceOf[TypeInputStream[T]])
       case x if x.isInstanceOf[Class[Int]] => Some(IntInputStream(input)).map(_.asInstanceOf[TypeInputStream[T]])
       case x if x.isInstanceOf[Class[Long]] => Some(LongInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
       case x if x.isInstanceOf[Class[Float]] => Some(FloatInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])

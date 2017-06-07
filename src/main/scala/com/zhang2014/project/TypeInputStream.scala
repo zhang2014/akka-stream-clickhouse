@@ -9,6 +9,11 @@ trait TypeInputStream[T]
   def next: Option[T]
 }
 
+case class ByteInputStream(input: DataInputStream) extends TypeInputStream[Byte]
+{
+  override def next: Option[Byte] = Try(input.readByte()).map(e => Some(e)).getOrElse(None)
+}
+
 case class IntInputStream(input: DataInputStream) extends TypeInputStream[Int]
 {
   override def next: Option[Int] = Try(input.readInt()).map(e => Some(e)).getOrElse(None)
