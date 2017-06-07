@@ -89,6 +89,7 @@ final class ColumnSource[T](bin: FileChannel, mark: FileChannel)(implicit m: Cla
       case x if x <:< reflect.classTag[Long] => Some(LongInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
       case x if x <:< reflect.classTag[Float] => Some(FloatInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
       case x if x <:< reflect.classTag[Float] => Some(FloatInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
+      case x if x <:< reflect.classTag[String] => Some(StringInputStream(input)).map(_.asInstanceOf[TypeInputStream[T]])
     }
 
 }

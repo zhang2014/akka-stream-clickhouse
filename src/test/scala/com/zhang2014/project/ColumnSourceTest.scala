@@ -4,9 +4,10 @@ import java.io.File
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{Keep, Sink}
+import akka.stream.scaladsl.Keep
 import akka.stream.testkit.scaladsl.TestSink
 import org.scalatest.WordSpec
+
 import scala.concurrent.duration._
 
 class ColumnSourceTest extends WordSpec
@@ -25,13 +26,23 @@ class ColumnSourceTest extends WordSpec
     //  │ 0000-00-00 │       1 │ OnClick   │     3 │
     //  └────────────┴─────────┴───────────┴───────┘
 
-    "successfully read part data" in {
+    "successfully read Int32 Column" in {
       val partURI = getClass.getClassLoader.getResource("test_table_1/19700101_19700101_2_2_0").toURI
       val source = ColumnSource[Int](new File(partURI).getAbsolutePath, "count")
       val sub = source.toMat(TestSink.probe[Int])(Keep.right).run()
 
       sub.request(2)
       sub.expectNext(3 seconds, 3)
+      sub.expectComplete()
+    }
+
+    "successfully read String Column" in {
+      val partURI = getClass.getClassLoader.getResource("test_table_1/19700101_19700101_2_2_0").toURI
+      val source = ColumnSource[String](new File(partURI).getAbsolutePath, "eventName")
+      val sub = source.toMat(TestSink.probe[String])(Keep.right).run()
+
+      sub.request(2)
+      sub.expectNext(3 seconds, "OnClick")
       sub.expectComplete()
     }
   }
