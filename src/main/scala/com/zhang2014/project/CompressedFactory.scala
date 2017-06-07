@@ -1,9 +1,9 @@
 package com.zhang2014.project
 
-import java.nio.{ByteOrder, ByteBuffer}
 import java.nio.channels.FileChannel
+import java.nio.{ByteBuffer, ByteOrder}
 
-import net.jpountz.lz4.{LZ4Factory, LZ4FastDecompressor}
+import net.jpountz.lz4.LZ4Factory
 
 trait CompressedReader
 {

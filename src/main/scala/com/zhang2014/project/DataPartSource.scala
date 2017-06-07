@@ -10,7 +10,7 @@ import akka.stream._
 import akka.stream.scaladsl.{GraphDSL, Source}
 import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
 
-case class Record(props: List[(Byte, String, Any)])
+
 
 object DataPartSource
 {
