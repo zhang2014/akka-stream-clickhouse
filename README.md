@@ -6,12 +6,12 @@ def transfrom(record:Record):Record = ???
 TableSource("${ClickhouseHome}/data/default/test_table_1").map(transfrom).to(TableSink("${ClickhouseHome}/data/default/test_table_2"))
 ```
 TODO:
-[√] ColumnSource
-[√] DataPartSource
-[√] TableSource
-[ ] ColumnSink
-[ ] DataPartSink
-[ ] TableSink
+- [x] ColumnSource
+- [x] DataPartSource
+- [x] TableSource
+- [ ]ColumnSink
+- [ ]DataPartSink
+- [ ]TableSink
 
 ## ClickHouse的结构说明:
 ### DataBase
