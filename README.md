@@ -1,6 +1,9 @@
 # akka-stream-clickhouse
 
-项目主要用于学习研究[ClickHouse](https://clickhouse.yandex/)([Github](https://github.com/yandex/ClickHouse))使用,本项目期望实现可以将Clickhouse中(Table,DataPart,Column)任一角色的数据进行读取后通过Akka-Stream进行转换后写回Clickhouse中.
+项目主要用于学习研究[ClickHouse](https://clickhouse.yandex/)([Github](https://github.com/yandex/ClickHouse))使用,本项目期望实现可以将Clickhouse中(Table,DataPart,Column)任一角色的数据进行读取后通过Akka-Stream进行转换后写回Clickhouse中,如下图:
+
+![Overview](https://github.com/zhang2014/akka-stream-clickhouse/blob/master/overview.png?raw=true)
+
 
 完成这一目标的主要的TODO如下(具体DataPart,Column说明见后文说明):
 - [X] ColumnSource,用于读取位于DataPart下的Column文件的数据
