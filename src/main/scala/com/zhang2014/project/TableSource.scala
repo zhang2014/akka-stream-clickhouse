@@ -2,14 +2,15 @@ package com.zhang2014.project
 
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.Calendar
-import akka.stream._
-import akka.stream.stage.{InHandler, OutHandler, GraphStageLogic, GraphStage}
-
-import scala.concurrent.duration._
 
 import akka.NotUsed
+import akka.actor.ActorSystem
+import akka.stream._
 import akka.stream.scaladsl.{GraphDSL, Source}
+import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
+import com.sun.prism.impl.Disposer.Record
+
+import scala.concurrent.duration._
 
 object TableSource
 {
@@ -29,7 +30,7 @@ object TableSource
     minMonth: Int, maxMonth: Int, minBlockNumber: Int, maxBlockNumber: Int, level: Int, fullPath: String
   )
 
-  def apply(path: String): Source[Record, NotUsed] = {
+  def apply(path: String)(implicit system: ActorSystem, materializer: Materializer): Source[Record, NotUsed] = {
     val tableDataPath = new File(path)
     if (!tableDataPath.exists() || !tableDataPath.isDirectory) {
       throw new IllegalArgumentException("Table Path should is a directory")

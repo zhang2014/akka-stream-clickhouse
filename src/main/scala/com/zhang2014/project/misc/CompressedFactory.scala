@@ -1,4 +1,4 @@
-package com.zhang2014.project
+package com.zhang2014.project.misc
 
 import java.nio.channels.FileChannel
 import java.nio.{ByteBuffer, ByteOrder}
@@ -7,7 +7,7 @@ import net.jpountz.lz4.LZ4Factory
 
 trait CompressedReader
 {
-  def read(channel: FileChannel, offset: Int, limit: Int): ByteBuffer
+  def read(channel: FileChannel): ByteBuffer
 }
 
 object CompressedFactory
@@ -24,7 +24,7 @@ object CompressedFactory
     headerBuffer.order(ByteOrder.LITTLE_ENDIAN)
     compressedBuffer.order(ByteOrder.LITTLE_ENDIAN)
 
-    override def read(channel: FileChannel, offset: Int, limit: Int): ByteBuffer = {
+    override def read(channel: FileChannel): ByteBuffer = {
       headerBuffer.clear()
       channel.read(headerBuffer)
       headerBuffer.flip()
@@ -45,7 +45,6 @@ object CompressedFactory
         decompressedBuffer.position,
         decompressedBuffer.limit
       )
-      decompressedBuffer.position(offset)
       decompressedBuffer
     }
 

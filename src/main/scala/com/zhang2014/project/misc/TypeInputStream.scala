@@ -1,4 +1,4 @@
-package com.zhang2014.project
+package com.zhang2014.project.misc
 
 import java.io.{EOFException, UTFDataFormatException}
 

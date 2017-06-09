@@ -3,39 +3,26 @@ package com.zhang2014.project
 import java.io.{BufferedReader, FileReader}
 import java.math.BigInteger
 import java.nio.{ByteBuffer, ByteOrder}
-import java.util.{Calendar, Date}
+import java.util.Date
 
 import akka.NotUsed
+import akka.actor.ActorSystem
 import akka.stream._
 import akka.stream.scaladsl.{GraphDSL, Source}
 import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
-
+import com.zhang2014.project.DataType._
 
 
 object DataPartSource
 {
-  def apply(path: String): Source[Record, NotUsed] = {
-    //TODO:验证CheckSum
-    //TODO:考虑primary.idx主键索引的使用
-    val reader = new BufferedReader(new FileReader(s"$path/columns.txt"))
 
-    val "columns format version: 1" = reader.readLine()
-    val Array(columnCount, "columns:") = reader.readLine().split(" ", 2)
+  private case class Record(props: List[(Byte, String, Any)])
 
-    import DataType._
+  def apply(path: String)(implicit system: ActorSystem, materializer: Materializer): Source[Record, NotUsed] = {
     Source.fromGraph(
-      GraphDSL.create() { implicit b =>
+      g = GraphDSL.create() { implicit b =>
         import GraphDSL.Implicits._
-        val columns = (0 until columnCount.toInt).map(_ => reader.readLine().split(" ", 2)).map(removeIgnoreChar).map {
-          case Array(columnName, "Date") => readDate(path, columnName).map(v => (DATE, columnName, v))
-          case Array(columnName, "Int16") => readInt16(path, columnName).map(v => (INT16, columnName, v))
-          case Array(columnName, "Int32") => readInt32(path, columnName).map(v => (INT32, columnName, v))
-          case Array(columnName, "Int64") => readInt64(path, columnName).map(v => (INT64, columnName, v))
-          case Array(columnName, "UInt16") => readUInt16(path, columnName).map(v => (UINT16, columnName, v))
-          case Array(columnName, "UInt32") => readUInt32(path, columnName).map(v => (UINT32, columnName, v))
-          case Array(columnName, "UInt64") => readUInt64(path, columnName).map(v => (UINT64, columnName, v))
-          case Array(columnName, "String") => ColumnSource[String](path, columnName).map(v => (STRING, columnName, v))
-        }
+        val columns = new DataPartSource(path).createColumnsSource()
         val zip = b.add(RecordZip(columns.length))
 
         columns.zipWithIndex.foreach { case (s, i) => s ~> zip.in(i) }
@@ -44,37 +31,58 @@ object DataPartSource
     )
   }
 
-  import scala.concurrent.duration._
+  private final class DataPartSource(path: String)(implicit system: ActorSystem, materializer: Materializer)
+  {
 
-  private def readDate(path: String, columnName: String) = readUInt16(path, columnName)
-    .map(d => new Date(d.days.toMillis))
+    import scala.concurrent.duration._
 
-  private def readInt8(path: String, columnName: String) = ColumnSource[Byte](path, columnName)
+    val reader                         = new BufferedReader(new FileReader(s"$path/columns.txt"))
+    val "columns format version: 1"    = reader.readLine()
+    val Array(columnCount, "columns:") = reader.readLine().split(" ", 2)
 
-  private def readUInt8(path: String, columnName: String) = readInt8(path, columnName).map(_ & 0x0FF)
+    def createColumnsSource() = (0 until columnCount.toInt).map(_ => reader.readLine().split(" ", 2))
+      .map(removeIgnoreChar).map {
+      case Array(columnName, "Date") => readDate(path, columnName).map(v => (DATE, columnName, v))
+      case Array(columnName, "Int16") => readInt16(path, columnName).map(v => (INT16, columnName, v))
+      case Array(columnName, "Int32") => readInt32(path, columnName).map(v => (INT32, columnName, v))
+      case Array(columnName, "Int64") => readInt64(path, columnName).map(v => (INT64, columnName, v))
+      case Array(columnName, "UInt16") => readUInt16(path, columnName).map(v => (UINT16, columnName, v))
+      case Array(columnName, "UInt32") => readUInt32(path, columnName).map(v => (UINT32, columnName, v))
+      case Array(columnName, "UInt64") => readUInt64(path, columnName).map(v => (UINT64, columnName, v))
+      case Array(columnName, "String") => ColumnSource[String](path, columnName).map(v => (STRING, columnName, v))
+    }
 
-  private def readInt16(path: String, columnName: String) = ColumnSource[Short](path, columnName)
+    private def readDate(path: String, columnName: String) = readUInt16(path, columnName)
+      .map(d => new Date(d.days.toMillis))
 
-  private def readUInt16(path: String, columnName: String) = readInt16(path, columnName).map(_ & 0x0FFFF)
+    private def readInt8(path: String, columnName: String) = ColumnSource[Byte](path, columnName)
 
-  private def readInt32(path: String, columnName: String) = ColumnSource[Int](path, columnName)
+    private def readUInt8(path: String, columnName: String) = readInt8(path, columnName).map(_ & 0x0FF)
 
-  private def readUInt32(path: String, columnName: String) = readInt32(path, columnName).map(_ & 0x0FFFFFFFFL)
+    private def readInt16(path: String, columnName: String) = ColumnSource[Short](path, columnName)
 
-  private def readInt64(path: String, columnName: String) = ColumnSource[Long](path, columnName)
+    private def readUInt16(path: String, columnName: String) = readInt16(path, columnName).map(_ & 0x0FFFF)
 
-  private val longBuffer = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN)
+    private def readInt32(path: String, columnName: String) = ColumnSource[Int](path, columnName)
 
-  private def readUInt64(path: String, columnName: String) = readInt64(path, columnName).map { l =>
-    longBuffer.clear()
-    longBuffer.putLong(l)
-    BigInt(new BigInteger(1, longBuffer.array()))
+    private def readUInt32(path: String, columnName: String) = readInt32(path, columnName).map(_ & 0x0FFFFFFFFL)
+
+    private def readInt64(path: String, columnName: String) = ColumnSource[Long](path, columnName)
+
+    private val longBuffer = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN)
+
+    private def readUInt64(path: String, columnName: String) = readInt64(path, columnName).map { l =>
+      longBuffer.clear()
+      longBuffer.putLong(l)
+      BigInt(new BigInteger(1, longBuffer.array()))
+    }
+
+    private def removeIgnoreChar(arr: Array[String]) = {
+      arr(0) = arr(0).substring(1, arr(0).length - 1)
+      arr
+    }
   }
 
-  private def removeIgnoreChar(arr: Array[String]) = {
-    arr(0) = arr(0).substring(1, arr(0).length - 1)
-    arr
-  }
 
   private final case class RecordZip(n: Int) extends GraphStage[UniformFanInShape[(Byte, String, Any), Record]]
   {
