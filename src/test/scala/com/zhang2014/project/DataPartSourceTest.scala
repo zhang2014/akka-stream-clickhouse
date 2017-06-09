@@ -8,6 +8,7 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Keep
 import akka.stream.testkit.scaladsl.TestSink
+import com.zhang2014.project.DataPartSource.Record
 import org.scalatest.WordSpec
 import scala.concurrent.duration._
 

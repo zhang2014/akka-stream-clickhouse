@@ -8,7 +8,7 @@ import akka.actor.ActorSystem
 import akka.stream._
 import akka.stream.scaladsl.{GraphDSL, Source}
 import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
-import com.sun.prism.impl.Disposer.Record
+import com.zhang2014.project.DataPartSource.Record
 
 import scala.concurrent.duration._
 
@@ -53,8 +53,7 @@ object TableSource
     )
   }
 
-  private final case class UnionSource(n: Int)
-    extends GraphStage[UniformFanInShape[Record, Record]]
+  private final case class UnionSource(n: Int) extends GraphStage[UniformFanInShape[Record, Record]]
   {
     val out    = Outlet[Record]("Union-Source-out")
     val inlets = (0 until n).map(i => Inlet[Record](s"Union-Source-in-$i"))

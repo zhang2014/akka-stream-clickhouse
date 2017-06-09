@@ -15,9 +15,9 @@ import scala.reflect.ClassTag
 
 object ColumnSource
 {
-  def apply[T: ClassTag](pathWithPart: String, columnName: String)
+  def apply[T: ClassTag](file: String)
     (implicit system: ActorSystem, materializer: Materializer): Source[T, NotUsed] = Source
-    .fromGraph(new ColumnSource[T](new RandomAccessFile(pathWithPart + "/" + columnName + ".bin", "r").getChannel))
+    .fromGraph(new ColumnSource[T](new RandomAccessFile(file, "r").getChannel))
 
   private final class ColumnSource[T](bin: FileChannel)
     (implicit m: ClassTag[T], system: ActorSystem, materializer: Materializer) extends GraphStage[SourceShape[T]]

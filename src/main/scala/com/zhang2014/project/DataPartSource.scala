@@ -16,7 +16,7 @@ import com.zhang2014.project.DataType._
 object DataPartSource
 {
 
-  private case class Record(props: List[(Byte, String, Any)])
+  case class Record(props: List[(Byte, String, Any)])
 
   def apply(path: String)(implicit system: ActorSystem, materializer: Materializer): Source[Record, NotUsed] = {
     Source.fromGraph(
@@ -42,44 +42,46 @@ object DataPartSource
 
     def createColumnsSource() = (0 until columnCount.toInt).map(_ => reader.readLine().split(" ", 2))
       .map(removeIgnoreChar).map {
-      case Array(columnName, "Date") => readDate(path, columnName).map(v => (DATE, columnName, v))
-      case Array(columnName, "Int16") => readInt16(path, columnName).map(v => (INT16, columnName, v))
-      case Array(columnName, "Int32") => readInt32(path, columnName).map(v => (INT32, columnName, v))
-      case Array(columnName, "Int64") => readInt64(path, columnName).map(v => (INT64, columnName, v))
-      case Array(columnName, "UInt16") => readUInt16(path, columnName).map(v => (UINT16, columnName, v))
-      case Array(columnName, "UInt32") => readUInt32(path, columnName).map(v => (UINT32, columnName, v))
-      case Array(columnName, "UInt64") => readUInt64(path, columnName).map(v => (UINT64, columnName, v))
-      case Array(columnName, "String") => ColumnSource[String](path, columnName).map(v => (STRING, columnName, v))
+      case Array(columnName, "Date") => readDate(resolveDataFile(columnName)).map(v => (DATE, columnName, v))
+      case Array(columnName, "Int16") => readInt16(resolveDataFile(columnName)).map(v => (INT16, columnName, v))
+      case Array(columnName, "Int32") => readInt32(resolveDataFile(columnName)).map(v => (INT32, columnName, v))
+      case Array(columnName, "Int64") => readInt64(resolveDataFile(columnName)).map(v => (INT64, columnName, v))
+      case Array(columnName, "UInt16") => readUInt16(resolveDataFile(columnName)).map(v => (UINT16, columnName, v))
+      case Array(columnName, "UInt32") => readUInt32(resolveDataFile(columnName)).map(v => (UINT32, columnName, v))
+      case Array(columnName, "UInt64") => readUInt64(resolveDataFile(columnName)).map(v => (UINT64, columnName, v))
+      case Array(columnName, "String") => ColumnSource[String](resolveDataFile(columnName))
+        .map(v => (STRING, columnName, v))
     }
 
-    private def readDate(path: String, columnName: String) = readUInt16(path, columnName)
-      .map(d => new Date(d.days.toMillis))
+    private def resolveDataFile(columnName: String) = s"$path/$columnName.bin"
 
-    private def readInt8(path: String, columnName: String) = ColumnSource[Byte](path, columnName)
+    private def readDate(dataFile: String) = readUInt16(dataFile).map(d => new Date(d.days.toMillis))
 
-    private def readUInt8(path: String, columnName: String) = readInt8(path, columnName).map(_ & 0x0FF)
+    private def readInt8(dataFile: String) = ColumnSource[Byte](dataFile)
 
-    private def readInt16(path: String, columnName: String) = ColumnSource[Short](path, columnName)
+    private def readUInt8(dataFile: String) = readInt8(dataFile).map(_ & 0x0FF)
 
-    private def readUInt16(path: String, columnName: String) = readInt16(path, columnName).map(_ & 0x0FFFF)
+    private def readInt16(dataFile: String) = ColumnSource[Short](dataFile)
 
-    private def readInt32(path: String, columnName: String) = ColumnSource[Int](path, columnName)
+    private def readUInt16(dataFile: String) = readInt16(dataFile).map(_ & 0x0FFFF)
 
-    private def readUInt32(path: String, columnName: String) = readInt32(path, columnName).map(_ & 0x0FFFFFFFFL)
+    private def readInt32(dataFile: String) = ColumnSource[Int](dataFile)
 
-    private def readInt64(path: String, columnName: String) = ColumnSource[Long](path, columnName)
+    private def readUInt32(dataFile: String) = readInt32(dataFile).map(_ & 0x0FFFFFFFFL)
 
-    private val longBuffer = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN)
+    private def readInt64(dataFile: String) = ColumnSource[Long](dataFile)
 
-    private def readUInt64(path: String, columnName: String) = readInt64(path, columnName).map { l =>
-      longBuffer.clear()
-      longBuffer.putLong(l)
-      BigInt(new BigInteger(1, longBuffer.array()))
+    private def readUInt64(dataFile: String) = {
+      val longBuffer = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN)
+      readInt64(dataFile).map { l =>
+        longBuffer.clear()
+        longBuffer.putLong(l)
+        BigInt(new BigInteger(1, longBuffer.array()))
+      }
     }
 
-    private def removeIgnoreChar(arr: Array[String]) = {
-      arr(0) = arr(0).substring(1, arr(0).length - 1)
-      arr
+    private def removeIgnoreChar(arr: Array[String]) = arr match {
+      case Array(typ, columnName) => Array(typ, columnName.substring(1, columnName.length - 1))
     }
   }
 
