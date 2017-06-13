@@ -28,7 +28,7 @@ class ColumnSourceTest extends WordSpec
 
     "successfully read Int32 Column" in {
       val partURI = getClass.getClassLoader.getResource("test_table_1/19700101_19700101_2_2_0").toURI
-      val source = ColumnSource[Int](new File(partURI).getAbsolutePath + "/count.bin")
+      val source = ColumnSource[Int]("Int32", new File(partURI).getAbsolutePath + "/count.bin")
       val sub = source.toMat(TestSink.probe[Int])(Keep.right).run()
 
       sub.request(2)
@@ -38,7 +38,7 @@ class ColumnSourceTest extends WordSpec
 
     "successfully read String Column" in {
       val partURI = getClass.getClassLoader.getResource("test_table_1/19700101_19700101_2_2_0").toURI
-      val source = ColumnSource[String](new File(partURI).getAbsolutePath + "/eventName.bin")
+      val source = ColumnSource[String]("String", new File(partURI).getAbsolutePath + "/eventName.bin")
       val sub = source.toMat(TestSink.probe[String])(Keep.right).run()
 
       sub.request(2)

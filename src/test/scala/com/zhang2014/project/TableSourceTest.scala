@@ -38,19 +38,19 @@ class TableSourceTest extends WordSpec
       sub.request(3)
       sub.expectNext(
         3 seconds, new Record(
-          (DATE, "eventDate", new Date(0)) ::
-            (UINT64, "eventId", BigInt(new BigInteger("1"))) ::
-            (STRING, "eventName", "OnClick") ::
-            (INT32, "count", 3) ::
+          ("Date", "eventDate", new Date(0)) ::
+            ("UInt64", "eventId", 1L) ::
+            ("String", "eventName", "OnClick") ::
+            ("Int32", "count", 3) ::
             Nil
         )
       )
       sub.expectNext(
         3 seconds, new Record(
-          (DATE, "eventDate", new Date(80, 0, 1, 8, 0, 0)) ::
-            (UINT64, "eventId", BigInt(new BigInteger("1"))) ::
-            (STRING, "eventName", "OnClick") ::
-            (INT32, "count", 3) ::
+          ("Date", "eventDate", new Date(80, 0, 1, 8, 0, 0)) ::
+            ("UInt64", "eventId", 1L) ::
+            ("String", "eventName", "OnClick") ::
+            ("Int32", "count", 3) ::
             Nil
         )
       )

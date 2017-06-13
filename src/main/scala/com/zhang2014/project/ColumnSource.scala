@@ -1,32 +1,37 @@
 package com.zhang2014.project
 
-import java.io.RandomAccessFile
+import java.io.{InputStream, FileInputStream, RandomAccessFile}
 import java.nio.channels.FileChannel
 
 import akka.NotUsed
 import akka.actor.ActorSystem
+import akka.stream._
 import akka.stream.scaladsl.Source
 import akka.stream.stage.{GraphStage, GraphStageLogic, OutHandler}
-import akka.stream._
 import com.google.common.io.LittleEndianDataInputStream
 import com.zhang2014.project.misc._
-
-import scala.reflect.ClassTag
-
 object ColumnSource
 {
-  def apply[T: ClassTag](file: String)
-    (implicit system: ActorSystem, materializer: Materializer): Source[T, NotUsed] = Source
-    .fromGraph(new ColumnSource[T](new RandomAccessFile(file, "r").getChannel))
-
-  private final class ColumnSource[T](bin: FileChannel)
-    (implicit m: ClassTag[T], system: ActorSystem, materializer: Materializer) extends GraphStage[SourceShape[T]]
+  def apply[T](dataType: String, file: String, compressed: Boolean = true)
+    (implicit system: ActorSystem, materializer: Materializer): Source[T, NotUsed] =
   {
-    lazy val out   = shape.out
-    lazy val shape = SourceShape(Outlet[T]("ClickHouse-Column-Source"))
+    if (compressed) {
+      Source.fromGraph(
+        new ColumnSource[T](
+          dataType, ByteBufferSourceInputStream(CompressedSource(new RandomAccessFile(file, "r").getChannel))
+        )
+      )
+    } else {
+      Source.fromGraph(new ColumnSource[T](dataType, new FileInputStream(file)))
+    }
+  }
 
-    lazy val stream         = ByteBufferSourceInputStream(CompressedSource(bin))(system, materializer)
-    lazy val streamWithType = createTypeInputStream(new LittleEndianDataInputStream(stream))
+  private final class ColumnSource[T](dataType: String, bin: InputStream)
+    (implicit system: ActorSystem, materializer: Materializer) extends GraphStage[SourceShape[T]]
+  {
+    lazy val out            = shape.out
+    lazy val shape          = SourceShape(Outlet[T]("ClickHouse-Column-Source"))
+    lazy val streamWithType = newTypeInputStream(dataType, new LittleEndianDataInputStream(bin))
 
     override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) {
 
@@ -44,13 +49,19 @@ object ColumnSource
       )
     }
 
-    private def createTypeInputStream(input: LittleEndianDataInputStream): Option[TypeInputStream[T]] = m match {
-      case x if x <:< reflect.classTag[Byte] => Some(ByteInputStream(input)).map(_.asInstanceOf[TypeInputStream[T]])
-      case x if x <:< reflect.classTag[Int] => Some(IntInputStream(input)).map(_.asInstanceOf[TypeInputStream[T]])
-      case x if x <:< reflect.classTag[Long] => Some(LongInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
-      case x if x <:< reflect.classTag[Float] => Some(FloatInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
-      case x if x <:< reflect.classTag[Short] => Some(ShortInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
-      case x if x <:< reflect.classTag[String] => Some(StringInputStream(input)).map(_.asInstanceOf[TypeInputStream[T]])
+    private def newTypeInputStream(tpe: String, input: LittleEndianDataInputStream): Option[TypeInputStream[T]] =
+      tpe match {
+        case "Date" => Some(DateInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
+        case "Int8" => Some(ByteInputStream(input)).map(_.asInstanceOf[TypeInputStream[T]])
+        case "Int32" => Some(IntInputStream(input)).map(_.asInstanceOf[TypeInputStream[T]])
+        case "Int64" => Some(LongInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
+        case "UInt64" => Some(UnsignedLongInputStream(input)).map(_.asInstanceOf[TypeInputStream[T]])
+        case "Float" => Some(FloatInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
+        case "Int16" => Some(ShortInputSteam(input)).map(_.asInstanceOf[TypeInputStream[T]])
+        case "String" => Some(StringInputStream(input)).map(_.asInstanceOf[TypeInputStream[T]])
+        case _ if tpe.startsWith("Tuple(") =>
+          val subInputs = tpe.substring(6, tpe.length - 1).split(",").map(subType => newTypeInputStream(subType, input))
+          Some(TupleInputStream(subInputs.map(_.get): _*)).map(_.asInstanceOf[TypeInputStream[T]])
     }
   }
 }
