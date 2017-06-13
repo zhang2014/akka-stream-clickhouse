@@ -5,9 +5,9 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 
 import akka.NotUsed
-import akka.stream.stage.{OutHandler, GraphStage, GraphStageLogic}
-import akka.stream.{Outlet, Attributes, SourceShape, Graph}
 import akka.stream.scaladsl.Source
+import akka.stream.stage.{GraphStage, GraphStageLogic, OutHandler}
+import akka.stream.{Attributes, Outlet, SourceShape}
 
 object UnCompressedSource
 {

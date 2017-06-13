@@ -33,8 +33,6 @@ class TableSourceTest extends WordSpec
       val tableURI = getClass.getClassLoader.getResource("test_table_1").toURI
       val tableSource = TableSource(new File(tableURI).getAbsolutePath)
       val sub = tableSource.toMat(TestSink.probe[Record])(Keep.right).run()
-
-      import DataType._
       sub.request(3)
       sub.expectNext(
         3 seconds, new Record(

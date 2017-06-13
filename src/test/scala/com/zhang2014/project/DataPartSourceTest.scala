@@ -32,8 +32,6 @@ class DataPartSourceTest extends WordSpec
       val partURI = getClass.getClassLoader.getResource("test_table_1/19700101_19700101_2_2_0").toURI
       val partSource = DataPartSource(new File(partURI).getAbsolutePath)
       val sub = partSource.toMat(TestSink.probe[Record])(Keep.right).run()
-
-      import DataType._
       sub.request(2)
       sub.expectNext(
         3 seconds,
