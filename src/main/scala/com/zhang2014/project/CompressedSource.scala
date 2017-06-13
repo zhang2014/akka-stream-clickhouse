@@ -10,17 +10,15 @@ import akka.stream.scaladsl.Source
 import akka.stream.stage.{OutHandler, GraphStageLogic, GraphStage}
 import com.zhang2014.project.misc.CompressedFactory
 
-/**
-  * 用于按块从文件中读取被压缩的数据,目前只支持LZ4的压缩
-  */
 object CompressedSource
 {
   def apply(file: String): Source[ByteBuffer, NotUsed] = Source
     .fromGraph(new CompressedSource(new RandomAccessFile(file, "r").getChannel))
 
-  def apply(fileChannel: FileChannel): Source[ByteBuffer, NotUsed] = Source.fromGraph(new CompressedSource(fileChannel))
+  def apply(fileChannel: FileChannel, limit: Long = -1): Source[ByteBuffer, NotUsed] = Source
+    .fromGraph(new CompressedSource(fileChannel))
 
-  private final class CompressedSource(bin: FileChannel) extends GraphStage[SourceShape[ByteBuffer]]
+  final class CompressedSource(bin: FileChannel, limit: Long = -1) extends GraphStage[SourceShape[ByteBuffer]]
   {
     private val compressedHeaderBuffer = ByteBuffer.allocate(17)
 
@@ -33,10 +31,10 @@ object CompressedSource
         {
           @throws[Exception](classOf[Exception])
           override def onPull(): Unit = {
-            if (bin.position() < bin.size()) {
-              push(out, nextCompressedBlock())
-            } else {
-              completeStage()
+            bin.position() match {
+              case pos if limit > 0 && pos < limit => push(out, nextCompressedBlock())
+              case pos if bin.position() < bin.size => push(out, nextCompressedBlock())
+              case _ => completeStage()
             }
           }
         }
@@ -53,7 +51,6 @@ object CompressedSource
       CompressedFactory.get(compressedHeaderBuffer.get()).read(bin)
     }
   }
-
 }
 
 

@@ -1,102 +1,14 @@
 package com.zhang2014.project.misc
 
-import java.io.{EOFException, UTFDataFormatException}
-import java.math.BigInteger
-import java.util.Date
+import java.io.UTFDataFormatException
+import java.nio.{ByteBuffer, LongBuffer}
 
 import com.google.common.io.LittleEndianDataInputStream
 
-import scala.util.Try
-
-//TODO:changed akka Flow
-trait TypeInputStream[T]
+object ReadUtility
 {
-  def next: Option[T]
-}
 
-import scala.concurrent.duration._
-
-case class DateInputSteam(input: LittleEndianDataInputStream) extends TypeInputStream[Date]
-{
-  override def next: Option[Date] = Try(input.readShort()).map[Int](_ & 0X0FFFF)
-    .map(_.days.toMillis).map(e => Some(new Date(e))).getOrElse(None)
-}
-
-case class ByteInputStream(input: LittleEndianDataInputStream) extends TypeInputStream[Byte]
-{
-  override def next: Option[Byte] = Try(input.readByte()).map(e => Some(e)).getOrElse(None)
-}
-
-case class ShortInputSteam(input: LittleEndianDataInputStream) extends TypeInputStream[Short]
-{
-  override def next: Option[Short] = Try(input.readShort()).map(e => Some(e)).getOrElse(None)
-}
-
-case class IntInputStream(input: LittleEndianDataInputStream) extends TypeInputStream[Int]
-{
-  override def next: Option[Int] = Try(input.readInt()).map(e => Some(e)).getOrElse(None)
-}
-
-case class FloatInputSteam(input: LittleEndianDataInputStream) extends TypeInputStream[Float]
-{
-  override def next: Option[Float] = Try(input.readFloat()).map(e => Some(e)).getOrElse(None)
-}
-
-case class LongInputSteam(input: LittleEndianDataInputStream) extends TypeInputStream[Long]
-{
-  override def next: Option[Long] = Try(input.readLong()).map(e => Some(e)).getOrElse(None)
-}
-
-case class UnsignedLongInputStream(input: LittleEndianDataInputStream) extends TypeInputStream[BigInt]
-{
-  override def next: Option[BigInt] = Try {
-    val bytes = Array.ofDim[Byte](8)
-    input.readFully(bytes)
-    Some(new BigInt(new BigInteger(1, bytes.reverse)))
-  }.getOrElse(None)
-}
-
-case class StringInputStream(input: LittleEndianDataInputStream) extends TypeInputStream[String]
-{
-  override def next: Option[String] = {
-    Try(readUTF()).map(e => Some(e)).recover { case _: EOFException => None }.get
-  }
-
-  def readUTF() = {
-    val length = getUTFLength.toInt
-    val chars = Array.ofDim[Char](length).map { _ =>
-      val char = input.readByte() & 0xff
-      char >> 4 match {
-        case x if x < 7 => char.toChar
-        case 12 | 13 => readDoubleUFT(char.toChar)
-        case 14 => readThreeUFT(char.toChar)
-      }
-    }
-    new String(chars)
-  }
-
-  private def readDoubleUFT(char1: Char) = {
-    val char2 = input.readByte().toInt
-    if ((char2 & 0xC0) == 0x80) {
-      ((char1 & 0x1F) << 6 | (char2 & 0x3F)).toChar
-    } else {
-      throw new UTFDataFormatException("malformed input around byte " + char2)
-    }
-  }
-
-  private def readThreeUFT(char1: Char) = {
-    val char2 = input.readByte().toInt
-    val char3 = input.readByte().toInt
-    if (((char2 & 0xC0) != 0x80) || ((char3 & 0xC0) != 0x80)) {
-      throw new UTFDataFormatException(
-        "malformed input around byte " + char2
-      )
-    } else {
-      (((char1 & 0x0F) << 12) | ((char2 & 0x3F) << 6) | ((char3 & 0x3F) << 0)).toChar
-    }
-  }
-
-  private def getUTFLength: Long = {
+  def readVarInt(input: LittleEndianDataInputStream): Long = {
     var length = 0
     for (i <- 0 until 9) {
       val byt = input.readByte()
@@ -107,15 +19,32 @@ case class StringInputStream(input: LittleEndianDataInputStream) extends TypeInp
     }
     length
   }
-}
 
-case class TupleInputStream(inputs: TypeInputStream[_ <: Any]*) extends TypeInputStream[Product]
-{
-  override def next: Option[Product] = {
-    Try(inputs.map(_.next)).map(_.map(_.get)).map(eles => list2Product(eles.toList)).map(Some.apply).getOrElse(None)
+  def readUTF(length: Int, input: LittleEndianDataInputStream) = {
+    val chars = Array.ofDim[Char](length).map { _ =>
+      val char = input.readByte() & 0xff
+      char >> 4 match {
+        case x if x < 7 => char.toChar
+        case 12 | 13 => readDoubleUFT(char.toChar, input)
+        case 14 => readThreeUFT(char.toChar, input)
+      }
+    }
+    new String(chars)
   }
 
-  private def list2Product(list: List[Any]): Product = list match {
+  def int2UInt(byte: Byte): Int = byte & 0x0ff
+
+  def int2UInt(short: Short): Int = short & 0x0ffff
+
+  def int2UInt(int: Int): Long = int & 0x0ffffffffL
+
+  def int2UInt(long: Long): BigInt = {
+    val buffer = ByteBuffer.allocate(8)
+    buffer.putLong(long)
+    BigInt(1, buffer.array())
+  }
+
+  def list2Product(list: List[Any]): Product = list match {
     case e1 :: Nil => Tuple1(e1)
     case e1 :: e2 :: Nil => Tuple2(e1, e2)
     case e1 :: e2 :: e3 :: Nil => Tuple3(e1, e2, e3)
@@ -158,5 +87,27 @@ case class TupleInputStream(inputs: TypeInputStream[_ <: Any]*) extends TypeInpu
       e8 :: e9 :: e10 :: e11 :: e12 :: e13 :: e14 :: e15 :: e16 :: e17 :: e18 :: e19 :: e20 :: e21 :: e22 :: Nil =>
       Tuple22(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16, e17, e18, e19, e20, e21, e22)
   }
+
+  private def readDoubleUFT(char1: Char, input: LittleEndianDataInputStream) = {
+    val char2 = input.readByte().toInt
+    if ((char2 & 0xC0) == 0x80) {
+      ((char1 & 0x1F) << 6 | (char2 & 0x3F)).toChar
+    } else {
+      throw new UTFDataFormatException("malformed input around byte " + char2)
+    }
+  }
+
+  private def readThreeUFT(char1: Char, input: LittleEndianDataInputStream) = {
+    val char2 = input.readByte().toInt
+    val char3 = input.readByte().toInt
+    if (((char2 & 0xC0) != 0x80) || ((char3 & 0xC0) != 0x80)) {
+      throw new UTFDataFormatException(
+        "malformed input around byte " + char2
+      )
+    } else {
+      (((char1 & 0x0F) << 12) | ((char2 & 0x3F) << 6) | ((char3 & 0x3F) << 0)).toChar
+    }
+  }
+
 
 }

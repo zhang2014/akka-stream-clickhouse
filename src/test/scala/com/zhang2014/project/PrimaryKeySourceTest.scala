@@ -1,13 +1,11 @@
 package com.zhang2014.project
 
-import java.io.{FileInputStream, File}
+import java.io.File
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Keep
 import akka.stream.testkit.scaladsl.TestSink
-import com.google.common.io.LittleEndianDataInputStream
-import com.zhang2014.project.misc.{StringInputStream, UnsignedLongInputStream}
 import org.scalatest.WordSpec
 
 class PrimaryKeySourceTest extends WordSpec
