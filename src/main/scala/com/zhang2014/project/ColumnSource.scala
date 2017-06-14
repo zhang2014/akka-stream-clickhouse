@@ -66,7 +66,6 @@ object ColumnSource
           case "UInt64" => tryReadNext[Long]("Int64").map(ReadUtility.int2UInt)
           case "String" => tryReadNext[Long]("VarInt").map(length => ReadUtility.readUTF(length.toInt, input))
           case _ if tpe.startsWith("Tuple(") =>
-            //后面的执行依赖于前面的执行结果,直接使用Option懒执行
             tpe.substring(6, tpe.length - 1).split(",").foldLeft(Option(List.empty[Any])) {
               case (reducer, elements) => reducer.flatMap(l => tryReadNext[Any](elements).map(x => l :+ x))
             }.map(ReadUtility.list2Product).map(Some.apply).getOrElse(Option.empty[A])
@@ -80,4 +79,5 @@ object ColumnSource
       }
     }
   }
+
 }

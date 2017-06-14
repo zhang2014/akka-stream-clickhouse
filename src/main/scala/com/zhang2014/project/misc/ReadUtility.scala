@@ -1,7 +1,7 @@
 package com.zhang2014.project.misc
 
 import java.io.UTFDataFormatException
-import java.nio.{ByteBuffer, LongBuffer}
+import java.nio.ByteBuffer
 
 import com.google.common.io.LittleEndianDataInputStream
 
