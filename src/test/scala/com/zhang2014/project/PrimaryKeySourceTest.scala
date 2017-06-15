@@ -6,6 +6,8 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Keep
 import akka.stream.testkit.scaladsl.TestSink
+import com.zhang2014.project.misc.UnCompressedRange
+import com.zhang2014.project.source.ColumnSource
 import org.scalatest.WordSpec
 
 class PrimaryKeySourceTest extends WordSpec
@@ -27,7 +29,7 @@ class PrimaryKeySourceTest extends WordSpec
     "successfully read primary key" in {
       val partURI = getClass.getClassLoader.getResource("test_table_1/19700101_19700101_2_2_0").toURI
       val source = ColumnSource[(BigInt, String)](
-        "Tuple(UInt64,String)", new File(partURI).getAbsolutePath + "/primary.idx", compressed = false
+        "Tuple(UInt64,String)", new File(partURI).getAbsolutePath + "/primary.idx", UnCompressedRange(0, -1)
       )
       val sub = source.toMat(TestSink.probe[(BigInt, String)])(Keep.right).run()
 

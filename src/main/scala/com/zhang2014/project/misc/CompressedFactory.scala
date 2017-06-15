@@ -36,7 +36,7 @@ object CompressedFactory
       val (compressedSize, decompressedSize) = readCompressionHead(channel)
       readBuffer = getCreateReadBuffer(compressedSize)
       readBuffer.limit(compressedSize.toInt)
-      readBuffer.flip()
+      readBuffer.rewind()
       //TODO:offset limit
       channel.read(readBuffer)
       readBuffer.flip()
@@ -52,7 +52,6 @@ object CompressedFactory
         decompressedBuffer.position,
         decompressedBuffer.limit
       )
-      decompressedBuffer.flip()
       decompressedBuffer
     }
 

@@ -1,7 +1,7 @@
-package com.zhang2014.project
+package com.zhang2014.project.source
 
 import java.io._
-import java.util.{NoSuchElementException, Date}
+import java.util.{Date, NoSuchElementException}
 
 import akka.NotUsed
 import akka.actor.ActorSystem
@@ -13,21 +13,9 @@ import com.zhang2014.project.misc._
 
 object ColumnSource
 {
-  def apply[T](dataType: String, file: String, compressed: Boolean = true, offset: Int = 0, limit: Int = -1)
-    (implicit system: ActorSystem, materializer: Materializer): Source[T, NotUsed] =
-  {
-    val channel = new RandomAccessFile(file, "r").getChannel
-
-    if (offset > 0) {
-      channel.position(offset)
-    }
-
-    val byteBufferSource = compressed match {
-      case true => CompressedSource(channel, limit)
-      case false => UnCompressedSource(channel, limit)
-    }
-    Source.fromGraph(new ColumnSource[T](dataType, new ByteBufferSourceInputStream(byteBufferSource)))
-  }
+  def apply[T](dataType: String, file: String, range: Range = CompressedRange(0, -1, 0, -1))
+    (implicit system: ActorSystem, materializer: Materializer): Source[T, NotUsed] = Source
+    .fromGraph(new ColumnSource[T](dataType, new ByteBufferSourceInputStream(FileSource(file, range))))
 
   private final class ColumnSource[T](dataType: String, bin: InputStream) extends GraphStage[SourceShape[T]]
   {

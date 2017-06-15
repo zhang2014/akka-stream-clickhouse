@@ -1,4 +1,4 @@
-package com.zhang2014.project
+package com.zhang2014.project.source
 
 import java.io.File
 import java.text.SimpleDateFormat
@@ -8,7 +8,7 @@ import akka.actor.ActorSystem
 import akka.stream._
 import akka.stream.scaladsl.{GraphDSL, Source}
 import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
-import com.zhang2014.project.DataPartSource.Record
+import com.zhang2014.project.source.DataPartSource.Record
 
 import scala.concurrent.duration._
 
