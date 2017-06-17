@@ -1,28 +1,28 @@
 package com.zhang2014.project.sink
 
-import java.nio.ByteBuffer
+import java.nio.{ByteOrder, ByteBuffer}
 import java.util.Date
 import java.util.concurrent.TimeUnit
 
 import akka.NotUsed
 import akka.stream._
-import akka.stream.scaladsl.Sink
+import akka.stream.scaladsl.{Flow, Sink}
 import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
-import com.zhang2014.project.misc.{Range, WriteUtility}
+import com.zhang2014.project.misc.{CompressedRange, Range, WriteUtility}
 
 object ColumnSink
 {
-  def apply[T](dataType: String, file: String): Sink[T, NotUsed] = apply(dataType, file, None)
+  def apply[T](dataType: String, file: String, range: Range = CompressedRange(0, -1, 0, -1)): Sink[T, NotUsed] =
+    Flow.fromGraph(TransForm[T](dataType, 0)).to(FileSink(file, range))
 
-  def apply[T](dataType: String, file: String, overWriteRange: Option[Range] = None): Sink[T, NotUsed] = ???
-
-  final case class TransForm[T](dataType: String, compressThreshold: Int) extends GraphStage[FlowShape[T, ByteBuffer]]
+  final case class TransForm[T](dataType: String, blockSize: Int) extends GraphStage[FlowShape[T, ByteBuffer]]
   {
     lazy val in    = shape.in
     lazy val out   = shape.out
     lazy val shape = FlowShape.of(Inlet[T]("TransForm-in"), Outlet[ByteBuffer]("TransForm-out"))
 
-    var buffer = ByteBuffer.allocate(compressThreshold * 20)
+    var count  = 0
+    var buffer = ByteBuffer.allocate(10 * 1024 * 1024).order(ByteOrder.LITTLE_ENDIAN)
 
     override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) {
       setHandlers(
@@ -30,36 +30,38 @@ object ColumnSink
         {
           @throws[Exception](classOf[Exception])
           override def onPush(): Unit = {
-            tryPushNext[T](dataType, grab(in))
-            buffer.position() match {
-              case pos if pos > compressThreshold => buffer.flip(); push(out, buffer)
-              case _ => tryPull(in)
+            count -= 1
+            pushToBuffer[T](dataType, grab(in))
+            count match {
+              case 0 => push(out, buffer)
+              case pos => tryPull(in)
             }
           }
 
           @throws[Exception](classOf[Exception])
           override def onPull(): Unit = {
+            count += blockSize
             buffer.clear()
             tryPull(in)
           }
         }
       )
 
-      private def tryPushNext[A](tpe: String, value: A): Unit = tpe match {
-        case "Date" => tryPushNext[Int]("UInt16", TimeUnit.DAYS.toDays(value.asInstanceOf[Date].getTime).toInt)
-        case "Int8" => buffer.put(value.asInstanceOf[Byte])
-        case "Int32" => buffer.putInt(value.asInstanceOf[Byte])
-        case "Int64" => buffer.putLong(value.asInstanceOf[Long])
-        case "Int16" => buffer.putShort(value.asInstanceOf[Short])
-        case "Float" => buffer.putFloat(value.asInstanceOf[Float])
-        case "VarInt" => WriteUtility.writeVarInt(buffer, value.asInstanceOf[Long])
-        case "UInt16" => buffer.putShort(value.asInstanceOf[Int].toShort)
-        case "UInt64" => buffer.put(value.asInstanceOf[BigInt].toByteArray)
-        case "String" => WriteUtility.writeUTF(buffer, value.asInstanceOf[String])
+      private def pushToBuffer[A](tpe: String, value: A): Unit = tpe match {
+        case "Date" => pushToBuffer[Int]("UInt16", TimeUnit.DAYS.toDays(value.asInstanceOf[Date].getTime).toInt)
+        case "Int8" => buffer = WriteUtility.maybeResize(buffer, 1).put(value.asInstanceOf[Byte])
+        case "Int32" => buffer = WriteUtility.maybeResize(buffer, 4).putInt(value.asInstanceOf[Byte])
+        case "Int64" => buffer = WriteUtility.maybeResize(buffer, 8).putLong(value.asInstanceOf[Long])
+        case "Int16" => buffer = WriteUtility.maybeResize(buffer, 2).putShort(value.asInstanceOf[Short])
+        case "Float32" => buffer = WriteUtility.maybeResize(buffer, 4).putFloat(value.asInstanceOf[Float])
+        case "VarInt" => buffer = WriteUtility.writeVarInt(buffer, value.asInstanceOf[Long])
+        case "UInt16" => buffer = WriteUtility.maybeResize(buffer, 2).putShort(value.asInstanceOf[Int].toShort)
+        case "UInt64" => buffer = WriteUtility.maybeResize(buffer, 8).put(value.asInstanceOf[BigInt].toByteArray)
+        case "String" => buffer = WriteUtility.writeUTF(buffer, value.asInstanceOf[String])
         case _ if tpe.startsWith("Tuple(") =>
           val product = value.asInstanceOf[Product]
           tpe.substring(6, tpe.length - 1).split(",").zipWithIndex.foreach {
-            case (subType, idx) => tryPushNext(subType, product.productElement(idx))
+            case (subType, idx) => pushToBuffer(subType, product.productElement(idx))
           }
       }
     }
