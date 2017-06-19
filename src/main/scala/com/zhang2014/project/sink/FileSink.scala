@@ -135,9 +135,8 @@ object FileSink
             compressionHead.putLong(checkSum(1))
             compressionHead.put(0x82.toByte)
             compressionHead.flip()
-            branch.write(compressionHead)
-            branch.write(compressedData)
-            compressionOption.totalSize += (17 + compressedData.limit())
+            compressionOption.totalSize += branch.write(compressionHead)
+            compressionOption.totalSize += branch.write(compressedData)
           case _ => compressionOption.totalSize += channel.write(bf)
         }
         channel.force(true)

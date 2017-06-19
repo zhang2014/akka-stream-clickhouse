@@ -73,6 +73,26 @@ class FileSinkTest extends WordSpec with Matchers
       val actualData = loadCompressedDataFile(dataFile.getAbsolutePath)
       util.Arrays.copyOf(actualData.array(), actualData.limit()) should ===(data.array())
     }
+
+    "overwrite data file with compressed file" in {
+      // | block1 = (0...3 + 4[1]) | block2 = (4[2,3,4] + 5...7 + 8[1,2])|block3 = (8[3,4] + 9...11 + 12[1,2,3])|block4 = (12[4] + 13...16)
+      val (dataFile, compressedOffsets) = createCompressedDataFile(17, 17)
+
+      val (publisher, completeHandle) = TestSource.probe[ByteBuffer]
+        .toMat(FileSink(dataFile.getAbsolutePath, CompressedRange(compressedOffsets(1), compressedOffsets(2), 3, 2)))(
+          Keep.both
+        ).run()
+
+      publisher.sendNext(ByteBuffer.wrap(intArray2Bytes(8)))
+      publisher.sendComplete()
+
+      Await.result(completeHandle, 3.seconds)
+      val actualData = loadCompressedDataFile(dataFile.getAbsolutePath)
+      util.Arrays.copyOf(actualData.array(), actualData.limit()) should ===(
+        Array(0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16)
+          .flatMap(int => Array(int.toByte, (int >> 8).toByte, (int >> 16).toByte, (int >> 24).toByte))
+      )
+    }
   }
 
   private def createTempFileAndChannel() = File.createTempFile("test_", "_write_file")
@@ -85,6 +105,37 @@ class FileSinkTest extends WordSpec with Matchers
       .foldLeft(ByteBuffer.allocate(limit - offset))((l, r) => l.put(buffer.get(r)))
     bf.flip()
     bf
+  }
+
+  private def createCompressedDataFile(size: Int, unCompressedBufferSize: Int): (File, Array[Long]) = {
+    val tempFile = File.createTempFile("test_", "_data")
+    val dataBuffer = ByteBuffer.allocate(unCompressedBufferSize)
+    val tempFileChannel = new RandomAccessFile(tempFile, "rw").getChannel
+    val compressionHead = ByteBuffer.allocate(17).putLong(0l).putLong(0L).put(0x82.toByte)
+
+    var compressedOffset = List(0L)
+
+    def flushData(): Unit = {
+      if (dataBuffer.position() > 0) {
+        compressionHead.flip()
+        tempFileChannel.write(compressionHead)
+        dataBuffer.flip()
+        tempFileChannel.write(CompressedFactory.get(0x82.toByte).compression(dataBuffer))
+        compressedOffset = compressedOffset :+ tempFileChannel.position()
+        dataBuffer.clear()
+      }
+    }
+
+    (0 until size).flatMap(int => Array(int.toByte, (int >> 8).toByte, (int >> 16).toByte, (int >> 24).toByte))
+      .foreach {
+        case byte if dataBuffer.hasRemaining => dataBuffer.put(byte)
+        case byte => flushData(); dataBuffer.put(byte)
+      }
+    flushData()
+    tempFileChannel.force(true)
+    tempFileChannel.close()
+    tempFile.deleteOnExit()
+    tempFile -> compressedOffset.toArray
   }
 
   private def loadCompressedDataFile(dataFile: String) = new RandomAccessFile(dataFile, "r").getChannel match {
