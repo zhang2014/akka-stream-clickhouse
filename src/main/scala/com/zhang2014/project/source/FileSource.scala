@@ -1,7 +1,7 @@
 package com.zhang2014.project.source
 
 import java.io.RandomAccessFile
-import java.nio.ByteBuffer
+import java.nio.{ByteOrder, ByteBuffer}
 import java.nio.channels.FileChannel
 
 import akka.NotUsed
@@ -57,7 +57,7 @@ object FileSource
 
     private def nextUnCompressedBlock(remainCapacity: Long) = {
       val readSize = Math.min(unCompressionBufferSize, remainCapacity)
-      val readBuffer = ByteBuffer.allocate(readSize.toInt)
+      val readBuffer = ByteBuffer.allocate(readSize.toInt).order(ByteOrder.LITTLE_ENDIAN)
       channel.read(readBuffer)
       readBuffer.flip()
       readBuffer
@@ -70,7 +70,7 @@ object FileSource
 
       compressedHead.getLong()
       compressedHead.getLong()
-      CompressedFactory.get(compressedHead.get()).read(channel)
+      CompressedFactory.get(compressedHead.get()).read(channel).order(ByteOrder.LITTLE_ENDIAN)
     }
   }
 

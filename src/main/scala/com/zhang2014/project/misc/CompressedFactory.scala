@@ -9,7 +9,7 @@ trait CompressionEngine
 {
   def read(channel: FileChannel): ByteBuffer
 
-  def write(channel: FileChannel, data: ByteBuffer): Unit
+  def compression(data: ByteBuffer): ByteBuffer
 }
 
 object CompressedFactory
@@ -31,13 +31,13 @@ object CompressedFactory
 
     headBuffer.order(ByteOrder.LITTLE_ENDIAN)
     readBuffer.order(ByteOrder.LITTLE_ENDIAN)
+    writeBuffer.order(ByteOrder.LITTLE_ENDIAN)
 
     override def read(channel: FileChannel): ByteBuffer = {
       val (compressedSize, decompressedSize) = readCompressionHead(channel)
       readBuffer = getCreateReadBuffer(compressedSize)
       readBuffer.limit(compressedSize.toInt)
       readBuffer.rewind()
-      //TODO:offset limit
       channel.read(readBuffer)
       readBuffer.flip()
 
@@ -55,15 +55,14 @@ object CompressedFactory
       decompressedBuffer
     }
 
-    override def write(channel: FileChannel, data: ByteBuffer): Unit = {
-      writeBuffer = getCreateWriteBuffer(data.limit())
+    override def compression(data: ByteBuffer): ByteBuffer = {
       writeBuffer.position(writeBuffer.position() + 8)
-      compressor.compress(data, data.position(), data.limit(), writeBuffer, writeBuffer.position(), writeBuffer.limit())
+      compressor.compress(data, writeBuffer)
       writeBuffer.flip()
       writeBuffer.putInt(writeBuffer.limit() - 8)
       writeBuffer.putInt(data.limit())
       writeBuffer.rewind()
-      channel.write(writeBuffer)
+      writeBuffer
     }
 
     private def readCompressionHead(channel: FileChannel) = {
