@@ -68,20 +68,20 @@ object FileSink
 
     override def createLogic(attributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) {
 
-      val compressionOption = attributes.get(WriteSettings(65535, 1048576, 0))
+      val settings = attributes.get(WriteSettings(65535, 1048576))
 
       setHandler(
         in, new InHandler
         {
           @throws[Exception](classOf[Exception])
           override def onPush(): Unit = copyAndWrite(grab(in)) match {
-            case pos if pos > compressionOption.min => writeData(branch); tryPull(in)
+            case pos if pos > settings.minInBytes => writeData(branch); tryPull(in)
             case _ => tryPull(in)
           }
 
           @throws[Exception](classOf[Exception])
           override def onUpstreamFinish(): Unit = {
-            readTruncatedDataWithAfter().map(copyAndWrite).getOrElse(compressionOption.buffer.position()) match {
+            readTruncatedDataWithAfter().map(copyAndWrite).getOrElse(settings.uncompressedBuffer.position()) match {
               case pos if pos > 0 => writeData(branch); onComplete; completeStage()
               case _ => onComplete; completeStage()
             }
@@ -112,19 +112,19 @@ object FileSink
 
       private def copyAndWrite(from: ByteBuffer) = {
         while (from.hasRemaining) {
-          compressionOption.buffer.put(from.get())
-          if (!compressionOption.buffer.hasRemaining) {
+          settings.uncompressedBuffer.put(from.get())
+          if (!settings.uncompressedBuffer.hasRemaining) {
             writeData(branch)
-            compressionOption.buffer.clear()
+            settings.uncompressedBuffer.clear()
           }
         }
-        compressionOption.buffer.position()
+        settings.uncompressedBuffer.position()
       }
 
       private val compressionHead = ByteBuffer.allocate(17).order(ByteOrder.LITTLE_ENDIAN)
 
       private def writeData(channel: FileChannel): Unit = {
-        val bf = compressionOption.buffer
+        val bf = settings.uncompressedBuffer
         bf.flip()
         range match {
           case rg: CompressedRange =>
@@ -135,9 +135,9 @@ object FileSink
             compressionHead.putLong(checkSum(1))
             compressionHead.put(0x82.toByte)
             compressionHead.flip()
-            compressionOption.totalSize += branch.write(compressionHead)
-            compressionOption.totalSize += branch.write(compressedData)
-          case _ => compressionOption.totalSize += channel.write(bf)
+            settings.totalByteSize += branch.write(compressionHead)
+            settings.totalByteSize += branch.write(compressedData)
+          case _ => settings.totalByteSize += channel.write(bf)
         }
         channel.force(true)
       }

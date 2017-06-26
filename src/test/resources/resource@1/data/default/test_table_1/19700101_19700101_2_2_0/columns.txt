@@ -1,0 +1,6 @@
+columns format version: 1
+4 columns:
+`eventDate` Date
+`eventId` UInt64
+`eventName` String
+`count` Int32

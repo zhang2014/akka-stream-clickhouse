@@ -8,6 +8,7 @@ scalaVersion := "2.11.7"
 
 val akkaVersion = "2.4.4"
 
+libraryDependencies += "org.scala-lang" % "scala-xml" % "2.11.0-M4"
 libraryDependencies += "com.google.guava" % "guava" % "21.0"
 libraryDependencies += "net.jpountz.lz4" % "lz4" % "1.3.0"
 libraryDependencies += "net.jpountz.lz4" % "lz4" % "1.3.0"

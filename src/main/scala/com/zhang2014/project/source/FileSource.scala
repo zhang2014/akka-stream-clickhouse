@@ -30,32 +30,38 @@ object FileSource
         out, new OutHandler
         {
           @throws[Exception](classOf[Exception])
-          override def onPull(): Unit = {
-            remain(range) -> range match {
-              case (size, rg: CompressedRange) if size > 0 => push(out, nextCompressedBlock(rg))
-              case (size, rg: UnCompressedRange) if size > 0 => push(out, nextUnCompressedBlock(size))
-              case _ => completeStage()
-            }
+          override def onPull(): Unit = remaining(range) -> range match {
+            case (`maxReadSize`, rg: CompressedRange) => push(out, readBlock(range, offset = rg.unCompressedBegin.toInt))
+            case (0, rg: CompressedRange) if rg.unCompressedEnd > 0 => push(out, readBlock(range, 0, rg.unCompressedEnd.toInt))
+            case (remain, rg) if remain > 0 => push(out, readBlock(rg))
+            case _ => completeStage()
           }
         }
       )
     }
 
-    private def remain(rg: Range) = rg match {
-      case _ if rg.end >= 0 => Math.min(channel.size(), rg.end) - channel.position()
+    private lazy val maxReadSize = range match {
+      case _ if range.end > 0 => Math.min(channel.size(), range.end) - range.begin
+      case _ => channel.size() - range.begin
+    }
+
+    private def remaining(range: Range) = range match {
+      case _ if range.end >= 0 => Math.min(channel.size(), range.end) - channel.position()
       case _ => channel.size() - channel.position()
     }
 
-    private def nextCompressedBlock(rg: CompressedRange) = rg match {
-      case CompressedRange(begin, _, pos, _) if begin == channel.position() => val bf = readCompressedData; bf.position(pos.toInt); bf
-      case CompressedRange(_, end, _, limit) if limit <= 0 => readCompressedData
-      case CompressedRange(_, end, _, limit) => readCompressedData match {
-        case buffer if end <= channel.position() => buffer.limit(limit.toInt); buffer
-        case buffer => buffer
+    private def readBlock(range: Range, offset: Int = 0, limit: Int = -1) = {
+      val nextBlock = range match {
+        case rg: CompressedRange => readCompressedData
+        case rg: UnCompressedRange if rg.end > 0 => readUncompressedData(rg.end - channel.position())
+        case rg: UnCompressedRange => readUncompressedData(channel.size() - channel.position())
       }
+      nextBlock.position(offset)
+      if (limit > 0) nextBlock.limit(limit)
+      nextBlock
     }
 
-    private def nextUnCompressedBlock(remainCapacity: Long) = {
+    private def readUncompressedData(remainCapacity: Long) = {
       val readSize = Math.min(unCompressionBufferSize, remainCapacity)
       val readBuffer = ByteBuffer.allocate(readSize.toInt).order(ByteOrder.LITTLE_ENDIAN)
       channel.read(readBuffer)
@@ -67,11 +73,8 @@ object FileSource
       compressedHead.clear()
       channel.read(compressedHead)
       compressedHead.flip()
-
-      compressedHead.getLong()
-      compressedHead.getLong()
+      val checkSum = Array(compressedHead.getLong(), compressedHead.getLong())
       CompressedFactory.get(compressedHead.get()).read(channel).order(ByteOrder.LITTLE_ENDIAN)
     }
   }
-
 }

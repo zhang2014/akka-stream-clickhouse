@@ -1,25 +1,22 @@
-package com.zhang2014.project
+package com.zhang2014.project.source
 
 import java.io.File
-import java.math.BigInteger
 import java.util.Date
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Keep
 import akka.stream.testkit.scaladsl.TestSink
-import com.zhang2014.project.source.{TableSource, DataPartSource}
-import DataPartSource.Record
 import org.scalatest.WordSpec
 
 import scala.concurrent.duration._
 
-class TableSourceTest extends WordSpec
+class DataPartSourceTest extends WordSpec
 {
   implicit val system       = ActorSystem()
   implicit val materializer = ActorMaterializer()
 
-  "TableSource" should {
+  "DataPartSource" should {
 
     //  test_table_1:
 
@@ -30,28 +27,18 @@ class TableSourceTest extends WordSpec
     //  │ 0000-00-00 │       1 │ OnClick   │     3 │
     //  └────────────┴─────────┴───────────┴───────┘
 
-    "successfully read table data" in {
-      val tableURI = getClass.getClassLoader.getResource("test_table_1").toURI
-      val tableSource = TableSource(new File(tableURI).getAbsolutePath)
-      val sub = tableSource.toMat(TestSink.probe[Record])(Keep.right).run()
-      sub.request(3)
-      sub.expectNext(
-        3 seconds, new Record(
-          ("Date", "eventDate", new Date(0)) ::
-            ("UInt64", "eventId", 1L) ::
-            ("String", "eventName", "OnClick") ::
-            ("Int32", "count", 3) ::
-            Nil
-        )
+    "successfully read part data" in {
+      val partURI = getClass.getClassLoader.getResource("test_table_1/19700101_19700101_2_2_0").toURI
+      val partSource = DataPartSource(
+        new File(partURI).getAbsolutePath,
+        "eventDate" :: "eventId" :: "eventName" :: "count" :: Nil
       )
+      val sub = partSource.toMat(TestSink.probe[List[(String, String, Any)]])(Keep.right).run()
+      sub.request(2)
       sub.expectNext(
-        3 seconds, new Record(
-          ("Date", "eventDate", new Date(80, 0, 1, 8, 0, 0)) ::
-            ("UInt64", "eventId", 1L) ::
-            ("String", "eventName", "OnClick") ::
-            ("Int32", "count", 3) ::
-            Nil
-        )
+        3 seconds,
+        ("eventDate", "Date", new Date(0)) ::("eventId", "UInt64", 1L) ::
+          ("eventName", "String", "OnClick") ::("count", "Int32", 3) :: Nil
       )
       sub.expectComplete()
     }

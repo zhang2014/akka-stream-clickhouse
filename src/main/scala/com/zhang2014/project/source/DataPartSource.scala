@@ -1,110 +1,60 @@
 package com.zhang2014.project.source
 
-import java.io.{BufferedReader, FileReader}
-
 import akka.NotUsed
 import akka.actor.ActorSystem
+import akka.ext.Implicit._
 import akka.stream._
-import akka.stream.scaladsl.{GraphDSL, Source}
-import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
-
+import akka.stream.scaladsl.Source
+import com.zhang2014.project.misc.{CompressedRange, Range, UnCompressedRange}
 
 object DataPartSource
 {
-
-  case class Record(props: List[(String, String, Any)])
-
-  def apply(path: String)(implicit system: ActorSystem, materializer: Materializer): Source[Record, NotUsed] = {
-    Source.fromGraph(
-      g = GraphDSL.create() { implicit b =>
-        import GraphDSL.Implicits._
-
-        val columns = new DataPartSource(path).createColumnsSource()
-        val zip = b.add(RecordZip(columns.length))
-
-        columns.zipWithIndex.foreach { case (s, i) => s ~> zip.in(i) }
-        SourceShape(zip.out)
-      }
-    )
-  }
-
-  final class DataPartSource(home: String)(implicit system: ActorSystem, materializer: Materializer)
+  def apply(dir: String, columns: List[String] = Nil, indices: List[String] = Nil)
+    (implicit system: ActorSystem, materializer: Materializer): Source[List[(String, String, Any)], NotUsed] =
   {
-    lazy val reader = new BufferedReader(new FileReader(s"$home/columns.txt"))
-
-    val "columns format version: 1"    = reader.readLine()
-    val Array(columnCount, "columns:") = reader.readLine().split(" ", 2)
-
-    def createColumnsSource(): Seq[Source[(String, String, Any), NotUsed]] = {
-      (0 until columnCount.toInt).map(_ => reader.readLine().split(" ", 2)).map {
-        case Array(name, tpe) =>
-          val resolvedName: String = resolveColumnName(name)
-          ColumnSource[Any](tpe, resolveDataFile(resolvedName))
-            .map[(String, String, Any)](v => (tpe, resolvedName, v))
-      }
+    val info = loadAllColumnsInfo(dir)
+    createRangeSource(dir, indices.map(name => name -> info(name)).toMap, columns).flatMapConcat { columnsRange =>
+      columnsRange.zipWithIndex.map { case (range, idx) =>
+        val columnName = columns(idx)
+        val columnDataType = info(columnName)
+        ColumnSource[Any](columnDataType, s"$dir/$columnName.bin", range).map(v => (columnName, columnDataType, v))
+          .map(_ :: Nil)
+      }.reduce((l, r) => l.zipWith(r)(_ ++ _))
     }
-
-    private def resolveDataFile(columnName: String) = s"$home/$columnName.bin"
-
-    private def resolveColumnName(columnName: String) = columnName.substring(1, columnName.length - 1)
-
   }
 
+  private def loadAllColumnsInfo(dir: String) = {
+    val firstDesc = "columns format version: 1"
+    val `firstDesc` :: secondDesc :: columnsDesc = scala.io.Source.fromFile(s"$dir/columns.txt").getLines().toList
+    val Array(columnCountDesc, "columns:") = secondDesc.split(" ", 2)
 
-  final case class RecordZip(n: Int) extends GraphStage[UniformFanInShape[(String, String, Any), Record]]
+    require(columnCountDesc.toInt == columnsDesc.length)
+    columnsDesc.map(_.split(" ", 2)).map { case Array(name, tpe) => name.substring(1, name.length - 1) -> tpe }.toMap
+  }
+
+  private def createRangeSource(dir: String, indices: Map[String, String], columns: List[String])
+    (implicit system: ActorSystem, materializer: Materializer) =
   {
-    var pending      = 0
-    var willShutDown = false
-
-
-    override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) {
-      inlets.foreach { in =>
-        setHandler(
-          in, new InHandler
-          {
-            @throws[Exception](classOf[Exception])
-            override def onPush(): Unit = {
-              pending -= 1
-              if (pending == 0) tryPushAll()
-            }
-
-            @throws[Exception](classOf[Exception])
-            override def onUpstreamFinish(): Unit = {
-              if (!isAvailable(in)) completeStage()
-              willShutDown = true
-            }
-          }
-        )
-      }
-
-      setHandler(
-        out, new OutHandler
-        {
-          @throws[Exception](classOf[Exception])
-          override def onPull(): Unit = {
-            pending += inlets.length
-            if (pending == 0) tryPushAll()
-          }
-        }
-      )
-
-      override def preStart(): Unit = inlets.foreach(pull)
-
-      private def tryPushAll(): Unit = {
-        push(out, Record(inlets.map(grab).toList))
-        if (willShutDown) {
-          completeStage()
-        }
-        else {
-          inlets.foreach(pull)
-        }
-      }
+    indices.toList match {
+      case Nil => Source.single[List[Range]](columns.map(_ => CompressedRange(0, -1, 0, -1)))
+      case _ => createPrimaryKeySource(dir, indices).zip(createMarkKeySource(dir, columns)).filter(x => true).map(_._2)
     }
-
-
-    lazy val inlets = (0 until n).map(i => Inlet[(String, String, Any)](s"Zip-Record-in-$i"))
-    lazy val out    = Outlet[Record]("Zip-Record-out")
-    lazy val shape  = UniformFanInShape(out, inlets: _*)
   }
 
+  private def createPrimaryKeySource(dir: String, indices: Map[String, String])
+    (implicit system: ActorSystem, materializer: Materializer) =
+  {
+    val keys = indices.keys.toArray
+    ColumnSource[Product](indices.values.mkString("Tuple(", ",", ")"), s"$dir/primary.idx", UnCompressedRange(0, -1))
+      .map(key => key.productIterator.zipWithIndex.map(x => keys(x._2) -> x._1).toMap)
+  }
+
+  private def createMarkKeySource(dir: String, columns: List[String])
+    (implicit system: ActorSystem, materializer: Materializer): Source[List[Range], NotUsed] =
+  {
+    columns.map(name => ColumnSource[(Long, Long)]("Tuple(Int64,Int64)", s"$dir/$name.mrk", UnCompressedRange(0, -1)))
+      .map(_.mapDependsWindow(2)(seq => seq.head -> seq.getOrElse(1, -1L -> -1L)))
+      .map(f => f.map { case (begin, end) => CompressedRange(begin._1, end._1, begin._2, end._2) })
+      .map(_.map(_ :: Nil)).reduce((l, r) => l.zipWith(r)((l1, r1) => l1 ++ r1))
+  }
 }

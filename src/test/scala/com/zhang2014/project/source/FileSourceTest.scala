@@ -64,11 +64,11 @@ class FileSourceTest extends WordSpec with Matchers
     "successfully read block2 data with compressed file" in {
       // | block1 = (0...3 + 4[1]) | block2 = (4[2,3,4] + 5...7 + 8[1,2])|block3 = (8[3,4] + 9...11 + 12[1,2,3])|block4 = (12[4] + 13...16)
       val (dataFile, compressedOffsets) = createCompressedDataFile(17, 17)
-      val sub = FileSource(dataFile.getAbsolutePath, CompressedRange(compressedOffsets(1), compressedOffsets(3), 3, 2))
+      val sub = FileSource(dataFile.getAbsolutePath, CompressedRange(compressedOffsets(1), compressedOffsets(3), 3, 1))
         .toMat(TestSink.probe)(Keep.right).run()
 
       var buffer = sub.requestNext()
-      (5 until 9).flatMap(int => Array(int.toByte, (int >> 8).toByte, (int >> 16).toByte, (int >> 24).toByte))
+      (5 until 13).flatMap(int => Array(int.toByte, (int >> 8).toByte, (int >> 16).toByte, (int >> 24).toByte))
         .foreach {
           case expectValue if buffer.hasRemaining => buffer.get() should ===(expectValue)
           case expectValue => buffer = sub.requestNext(); buffer.get() should ===(expectValue)

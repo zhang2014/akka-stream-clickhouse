@@ -8,11 +8,17 @@ import akka.stream.Attributes.Attribute
 object WriteSettings
 {
 
-  case class WriteSettings(min: Int, max: Int, var totalSize: Long) extends Attribute
+  case class WriteSettings(
+    minInBytes: Int = 65535,
+    maxInBytes: Int = 1048576,
+    var totalByteSize: Long = 0,
+    blockSize: Int = 8192
+  ) extends Attribute
   {
-    val bytes  = Array.ofDim[Byte](max)
-    val buffer = ByteBuffer.wrap(bytes)
+    val uncompressedBytes  = Array.ofDim[Byte](maxInBytes)
+    val uncompressedBuffer = ByteBuffer.wrap(uncompressedBytes)
   }
 
-  def apply(min: Int, max: Int): Attributes = Attributes(new WriteSettings(min, max, 0))
+  def apply(minInBytes: Int = 65535, maxInBytes: Int = 1048576, blockSize: Int = 8192): Attributes =
+    Attributes(new WriteSettings(minInBytes, maxInBytes, 0, blockSize))
 }
